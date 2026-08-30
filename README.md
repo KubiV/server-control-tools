@@ -119,8 +119,8 @@ Develop and test the application on macOS before deploying to the Raspberry Pi:
 ### 2. Install & Run Dev Server
 ```bash
 # Clone repository
-git clone https://github.com/jakubvavra/server-controll-tools.git
-cd server-controll-tools
+git clone https://github.com/KubiV/server-control-tools.git
+cd server-control-tools
 
 # Copy environment file
 cp .env.example .env
@@ -157,8 +157,8 @@ The application is containerized using a multi-stage Docker build optimized for 
 
 ### Step 1: Clone Repository on Raspberry Pi
 ```bash
-git clone https://github.com/jakubvavra/server-controll-tools.git ~/server-controll-tools
-cd ~/server-controll-tools
+git clone https://github.com/KubiV/server-control-tools.git ~/server-control-tools
+cd ~/server-control-tools
 ```
 
 ### Step 2: Configure Environment

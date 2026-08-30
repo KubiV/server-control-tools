@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { authService, SESSION_COOKIE_NAME } from '$lib/server/auth/AuthService';
 import { logger } from '$lib/server/logger';
 
-export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, url, cookies, getClientAddress }) => {
 	const clientIp = getClientAddress ? getClientAddress() : '127.0.0.1';
 
 	if (authService.isRateLimited(clientIp)) {
@@ -27,11 +27,13 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		authService.resetAttempts(clientIp);
 		const token = authService.createSessionToken();
 
+		const isHttps = url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
+
 		cookies.set(SESSION_COOKIE_NAME, token, {
 			path: '/',
 			httpOnly: true,
-			sameSite: 'strict',
-			secure: process.env.NODE_ENV === 'production',
+			sameSite: 'lax',
+			secure: isHttps,
 			maxAge: 7 * 24 * 60 * 60 // 7 days
 		});
 
