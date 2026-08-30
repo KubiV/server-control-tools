@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authService, SESSION_COOKIE_NAME } from '$lib/server/auth/AuthService';
+import { authService, SESSION_COOKIE_NAME, isSecureConnection } from '$lib/server/auth/AuthService';
 import { logger } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ request, url, cookies, getClientAddress }) => {
@@ -27,7 +27,7 @@ export const POST: RequestHandler = async ({ request, url, cookies, getClientAdd
 		authService.resetAttempts(clientIp);
 		const token = authService.createSessionToken();
 
-		const isHttps = url.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
+		const isHttps = isSecureConnection(request, url);
 
 		cookies.set(SESSION_COOKIE_NAME, token, {
 			path: '/',
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, url, cookies, getClientAdd
 			maxAge: 7 * 24 * 60 * 60 // 7 days
 		});
 
-		logger.info(`Successful login from ${clientIp}`);
+		logger.info(`Successful login from ${clientIp} (secure cookie: ${isHttps})`);
 		return json({ success: true, message: 'Authenticated successfully' });
 	} catch (err) {
 		return json({ error: 'Invalid request payload' }, { status: 400 });

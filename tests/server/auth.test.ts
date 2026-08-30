@@ -51,5 +51,28 @@ describe('AuthService', () => {
 		auth.resetAttempts(ip);
 		expect(auth.isRateLimited(ip)).toBe(false);
 	});
+
+	it('detects HTTP vs HTTPS connections correctly for cookie secure flag', async () => {
+		const { isSecureConnection } = await import('$lib/server/auth/AuthService');
+
+		// HTTP on LAN IP
+		const reqLan = new Request('http://192.168.1.201:3000/api/auth/login', {
+			headers: { host: '192.168.1.201:3000', referer: 'http://192.168.1.201:3000/login' }
+		});
+		expect(isSecureConnection(reqLan, new URL('http://192.168.1.201:3000/api/auth/login'))).toBe(false);
+
+		// HTTPS with x-forwarded-proto
+		const reqProxyHttps = new Request('http://127.0.0.1:3000/api/auth/login', {
+			headers: { 'x-forwarded-proto': 'https', host: 'nas.domain.com' }
+		});
+		expect(isSecureConnection(reqProxyHttps, new URL('http://127.0.0.1:3000/api/auth/login'))).toBe(true);
+
+		// HTTPS origin/referer
+		const reqHttpsReferer = new Request('http://127.0.0.1:3000/api/auth/login', {
+			headers: { referer: 'https://nas.domain.com/login', host: 'nas.domain.com' }
+		});
+		expect(isSecureConnection(reqHttpsReferer, new URL('http://127.0.0.1:3000/api/auth/login'))).toBe(true);
+	});
 });
+
 

@@ -58,6 +58,7 @@ const envSchema = z.object({
 	NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 	APP_AUTH_SECRET: z.string().default('default-insecure-secret-key-must-be-changed-in-production-32-chars'),
 	APP_PASSWORD: z.string().default('admin'),
+	COOKIE_SECURE: z.enum(['auto', 'true', 'false', '1', '0']).default('auto'),
 
 	// NAS Configuration (Primary Host, e.g. Tailscale IP)
 	NAS_HOST: z.string().default('127.0.0.1'),
@@ -92,7 +93,8 @@ export const config = {
 	isProduction: parsedEnv.NODE_ENV === 'production',
 	auth: {
 		secret: parsedEnv.APP_AUTH_SECRET,
-		password: parsedEnv.APP_PASSWORD
+		password: parsedEnv.APP_PASSWORD,
+		cookieSecure: parsedEnv.COOKIE_SECURE
 	},
 	nas: {
 		host: primaryHost || '127.0.0.1',

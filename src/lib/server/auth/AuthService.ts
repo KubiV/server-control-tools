@@ -122,3 +122,47 @@ export class AuthService {
 
 export const authService = new AuthService();
 
+/**
+ * Determine whether session cookies should be marked with the `Secure` flag.
+ * In production when accessed directly via HTTP (e.g. LAN IP 192.168.x.x:3000),
+ * setting `Secure` causes browsers (Chrome, Safari, Firefox) to discard the cookie.
+ */
+export function isSecureConnection(request: Request, url: URL): boolean {
+	const setting = config.auth.cookieSecure;
+	if (setting === 'true' || setting === '1') return true;
+	if (setting === 'false' || setting === '0') return false;
+
+	// Check standard HTTPS proxy headers
+	const forwardedProto = request.headers.get('x-forwarded-proto');
+	if (forwardedProto) {
+		return forwardedProto.split(',')[0].trim().toLowerCase() === 'https';
+	}
+
+	// Check origin or referer header if available
+	const origin = request.headers.get('origin');
+	if (origin) {
+		if (origin.toLowerCase().startsWith('https://')) return true;
+		if (origin.toLowerCase().startsWith('http://')) return false;
+	}
+
+	const referer = request.headers.get('referer');
+	if (referer) {
+		if (referer.toLowerCase().startsWith('https://')) return true;
+		if (referer.toLowerCase().startsWith('http://')) return false;
+	}
+
+	// Check if host indicates a plain HTTP LAN / localhost connection
+	const host = request.headers.get('host') || url.host;
+	if (
+		host.includes(':3000') ||
+		host.includes(':80') ||
+		/^(\d{1,3}\.){3}\d{1,3}/.test(host) ||
+		host.startsWith('localhost') ||
+		host.startsWith('127.0.0.1')
+	) {
+		return false;
+	}
+
+	return url.protocol === 'https:';
+}
+

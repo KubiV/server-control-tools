@@ -25,7 +25,7 @@
 			const data = await res.json();
 
 			if (res.ok && data.success) {
-				window.location.href = '/';
+				window.location.replace('/');
 			} else {
 				errorMessage = data.error || 'Authentication failed. Please check your password.';
 			}
