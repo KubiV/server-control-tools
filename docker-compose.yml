@@ -1,0 +1,24 @@
+services:
+  control-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server-control-tools
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Mount Docker socket to enable Pi container management
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount thermal zone for Raspberry Pi CPU temperature monitoring
+      - /sys/class/thermal:/sys/class/thermal:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    # Note for Raspberry Pi LAN Wake-on-LAN:
+    # If Wake-on-LAN broadcast (255.255.255.255) is blocked by Docker bridge network,
+    # you can uncomment 'network_mode: host' and remove the 'ports' section above.
+    # network_mode: host
+
