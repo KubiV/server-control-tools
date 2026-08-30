@@ -11,6 +11,9 @@ export interface NasStatusResponse {
 	uptime?: number;
 	errorMessage?: string;
 	lastChecked: string;
+	webUrl?: string;
+	quickConnectUrl?: string;
+	directUrl?: string;
 }
 
 export interface NasPowerResponse {

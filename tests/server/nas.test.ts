@@ -149,4 +149,21 @@ describe('NasService & Host Utilities', () => {
 		expect(result.action).toBe('restart');
 		expect(result.message).toContain('Restart signal received');
 	});
+
+	it('properly generates web management and QuickConnect URLs', () => {
+		// Test QuickConnect URL generation
+		const qcUrl = nas.getQuickConnectUrl();
+		if (qcUrl) {
+			expect(qcUrl).toContain('quickconnect.to');
+		}
+
+		// Test direct URL generation with custom host
+		const directUrl = nas.getDirectUrl('192.168.1.205');
+		expect(directUrl).toBe('https://192.168.1.205:5001');
+
+		// Test getWebUrl returns a valid URL string
+		const webUrl = nas.getWebUrl('192.168.1.205');
+		expect(webUrl).toBeTruthy();
+		expect(webUrl.startsWith('http')).toBe(true);
+	});
 });

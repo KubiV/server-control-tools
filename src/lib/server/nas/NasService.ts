@@ -52,6 +52,40 @@ export class NasService {
 	}
 
 	/**
+	 * Get direct browser link to DSM WebUI based on active or primary host and configured port
+	 */
+	public getDirectUrl(activeHost?: string): string {
+		const host = activeHost || this.activeHost || config.nas.host;
+		const isHttps = config.nas.port === 443 || config.nas.port === 5001 || !config.nas.port;
+		const protocol = isHttps ? 'https' : 'http';
+		return `${protocol}://${host}:${config.nas.port}`;
+	}
+
+	/**
+	 * Get QuickConnect URL if NAS_QUICKCONNECT_ID is configured
+	 */
+	public getQuickConnectUrl(): string | undefined {
+		if (!config.nas.quickConnectId) return undefined;
+		return `http://quickconnect.to/${config.nas.quickConnectId}`;
+	}
+
+	/**
+	 * Get primary web management URL (custom URL > QuickConnect > Direct IP fallback)
+	 */
+	public getWebUrl(activeHost?: string): string {
+		if (config.nas.webUrl) {
+			if (/^https?:\/\//i.test(config.nas.webUrl)) {
+				return config.nas.webUrl;
+			}
+			return `https://${config.nas.webUrl}`;
+		}
+		if (config.nas.quickConnectId) {
+			return `http://quickconnect.to/${config.nas.quickConnectId}`;
+		}
+		return this.getDirectUrl(activeHost);
+	}
+
+	/**
 	 * Low-level HTTPS / HTTP request to Synology DSM WebAPI
 	 */
 	public async request<T = Record<string, unknown>>(
@@ -268,6 +302,7 @@ export class NasService {
 	public async getStatus(): Promise<NasStatusResponse> {
 		const timestamp = new Date().toISOString();
 		const candidateHosts = config.nas.candidateHosts.length > 0 ? config.nas.candidateHosts : [config.nas.host];
+		const quickConnectUrl = this.getQuickConnectUrl();
 
 		if (!config.nas.host || (config.nas.host === '127.0.0.1' && !config.nas.username)) {
 			this.lastKnownState = 'UNKNOWN';
@@ -277,6 +312,9 @@ export class NasService {
 				activeHost: undefined,
 				candidateHosts,
 				port: config.nas.port,
+				webUrl: this.getWebUrl(),
+				quickConnectUrl,
+				directUrl: this.getDirectUrl(),
 				errorMessage: 'NAS_HOST or NAS_USERNAME is not configured.',
 				lastChecked: timestamp
 			};
@@ -284,6 +322,8 @@ export class NasService {
 
 		// Discover active reachable host (Tailscale vs Local IP fallback)
 		const reachableHost = await this.discoverReachableHost();
+		const webUrl = this.getWebUrl(reachableHost || undefined);
+		const directUrl = this.getDirectUrl(reachableHost || undefined);
 
 		if (!reachableHost) {
 			this.lastKnownState = 'OFFLINE';
@@ -294,6 +334,9 @@ export class NasService {
 				activeHost: undefined,
 				candidateHosts,
 				port: config.nas.port,
+				webUrl,
+				quickConnectUrl,
+				directUrl,
 				errorMessage: `NAS is offline or unreachable on Tailscale and Local LAN (${candidateHosts.join(', ')}).`,
 				lastChecked: timestamp
 			};
@@ -310,6 +353,9 @@ export class NasService {
 					activeHost: reachableHost,
 					candidateHosts,
 					port: config.nas.port,
+					webUrl,
+					quickConnectUrl,
+					directUrl,
 					errorMessage: authResult.error || 'Authentication error',
 					lastChecked: timestamp
 				};
@@ -348,6 +394,9 @@ export class NasService {
 				model: model || 'Synology NAS',
 				version,
 				uptime,
+				webUrl,
+				quickConnectUrl,
+				directUrl,
 				lastChecked: timestamp
 			};
 		} catch (err) {
@@ -359,6 +408,9 @@ export class NasService {
 				activeHost: reachableHost,
 				candidateHosts,
 				port: config.nas.port,
+				webUrl,
+				quickConnectUrl,
+				directUrl,
 				errorMessage: errMsg,
 				lastChecked: timestamp
 			};

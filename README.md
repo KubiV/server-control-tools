@@ -101,6 +101,8 @@ cp .env.example .env
 | `NAS_WOL_BROADCAST_ADDRESS` | UDP broadcast destination address | `255.255.255.255` |
 | `NAS_WOL_PORT` | UDP broadcast port (usually 9 or 7) | `9` |
 | `NAS_REJECT_UNAUTHORIZED` | Reject self-signed TLS certificates | `false` (if using internal certs) |
+| `NAS_QUICKCONNECT_ID` | Optional QuickConnect ID (e.g. `avum` -> `http://quickconnect.to/avum`) | `avum` |
+| `NAS_WEB_URL` | Optional custom / direct DSM Web URL (overrides default link) | `https://192-168-1-205.avum.direct.quickconnect.to:5001/#/signin` |
 | `DOCKER_SOCKET_PATH` | Path to host Docker daemon socket | `/var/run/docker.sock` |
 
 > [!CAUTION]

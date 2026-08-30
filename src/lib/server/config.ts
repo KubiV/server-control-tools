@@ -73,6 +73,12 @@ const envSchema = z.object({
 	NAS_WOL_PORT: z.coerce.number().default(9),
 	NAS_REJECT_UNAUTHORIZED: z.enum(['true', 'false', '1', '0']).default('false'),
 
+	// QuickConnect & Management Links (Optional)
+	// E.g. "avum" -> generates http://quickconnect.to/avum
+	NAS_QUICKCONNECT_ID: z.string().optional().default(''),
+	// E.g. "https://192-168-1-205.avum.direct.quickconnect.to:5001/#/signin" or "http://quickconnect.to/avum"
+	NAS_WEB_URL: z.string().optional().default(''),
+
 	// Docker Configuration
 	DOCKER_SOCKET_PATH: z.string().default('/var/run/docker.sock')
 });
@@ -106,7 +112,9 @@ export const config = {
 		wolMac: parsedEnv.NAS_WOL_MAC,
 		wolBroadcastAddress: parsedEnv.NAS_WOL_BROADCAST_ADDRESS,
 		wolPort: parsedEnv.NAS_WOL_PORT,
-		rejectUnauthorized: parsedEnv.NAS_REJECT_UNAUTHORIZED === 'true' || parsedEnv.NAS_REJECT_UNAUTHORIZED === '1'
+		rejectUnauthorized: parsedEnv.NAS_REJECT_UNAUTHORIZED === 'true' || parsedEnv.NAS_REJECT_UNAUTHORIZED === '1',
+		quickConnectId: (parsedEnv.NAS_QUICKCONNECT_ID || '').trim(),
+		webUrl: (parsedEnv.NAS_WEB_URL || '').trim()
 	},
 	docker: {
 		socketPath: parsedEnv.DOCKER_SOCKET_PATH
@@ -138,6 +146,8 @@ export function getMaskedConfig() {
 		nasFallbackHost: config.nas.fallbackHost,
 		nasCandidateHosts: config.nas.candidateHosts,
 		nasPort: config.nas.port,
+		nasQuickConnectId: config.nas.quickConnectId,
+		nasWebUrl: config.nas.webUrl,
 		nasWolMacMasked: maskMacAddress(config.nas.wolMac),
 		nasConfigured: Boolean(config.nas.host && config.nas.username && config.nas.password),
 		dockerSocket: config.docker.socketPath
