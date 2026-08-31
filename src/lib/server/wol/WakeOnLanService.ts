@@ -1,7 +1,61 @@
 import dgram from 'node:dgram';
+import os from 'node:os';
 import { config, maskMacAddress } from '../config';
 import { logger } from '../logger';
 import type { WolResponse } from '$lib/types';
+
+/**
+ * Calculates the IPv4 broadcast address given an IP address and a subnet mask.
+ * E.g. ("192.168.1.50", "255.255.255.0") -> "192.168.1.255"
+ */
+export function calculateBroadcastAddress(ip: string, netmask: string): string | null {
+	const ipParts = ip.split('.').map((p) => parseInt(p, 10));
+	const maskParts = netmask.split('.').map((p) => parseInt(p, 10));
+
+	if (ipParts.length !== 4 || maskParts.length !== 4) return null;
+	if (ipParts.some(isNaN) || maskParts.some(isNaN)) return null;
+
+	const broadcastParts = ipParts.map((part, i) => part | (~maskParts[i] & 255));
+	return broadcastParts.join('.');
+}
+
+/**
+ * Derives a standard /24 subnet broadcast address from an IPv4 address.
+ * E.g. "192.168.1.204" -> "192.168.1.255"
+ */
+export function deriveSubnetBroadcast(ip: string): string | null {
+	if (!ip) return null;
+	const parts = ip.split('.');
+	if (parts.length === 4 && parts.every((p) => !isNaN(Number(p)) && Number(p) >= 0 && Number(p) <= 255)) {
+		return `${parts[0]}.${parts[1]}.${parts[2]}.255`;
+	}
+	return null;
+}
+
+/**
+ * Retrieves all active non-internal IPv4 broadcast addresses across network interfaces.
+ */
+export function getLocalBroadcastAddresses(): string[] {
+	const broadcasts: Set<string> = new Set();
+	try {
+		const interfaces = os.networkInterfaces();
+		for (const ifaceName of Object.keys(interfaces)) {
+			const addrs = interfaces[ifaceName];
+			if (!addrs) continue;
+			for (const addr of addrs) {
+				if ((addr.family === 'IPv4' || (addr.family as unknown) === 4) && !addr.internal) {
+					if (addr.netmask) {
+						const bcast = calculateBroadcastAddress(addr.address, addr.netmask);
+						if (bcast) broadcasts.add(bcast);
+					}
+				}
+			}
+		}
+	} catch (err) {
+		logger.warn(`Could not enumerate network interfaces for WOL broadcast: ${err}`);
+	}
+	return Array.from(broadcasts);
+}
 
 export class WakeOnLanService {
 	/**
@@ -46,7 +100,7 @@ export class WakeOnLanService {
 	}
 
 	/**
-	 * Send Wake-on-LAN magic packet over UDP broadcast.
+	 * Send Wake-on-LAN magic packet over UDP broadcast to all candidate broadcast targets.
 	 */
 	public async sendWolPacket(options?: {
 		mac?: string;
@@ -54,8 +108,8 @@ export class WakeOnLanService {
 		port?: number;
 	}): Promise<WolResponse> {
 		const targetMac = options?.mac || config.nas.wolMac;
-		const broadcastAddress = options?.broadcastAddress || config.nas.wolBroadcastAddress;
-		const port = options?.port || config.nas.wolPort;
+		const defaultBroadcastAddress = options?.broadcastAddress || config.nas.wolBroadcastAddress || '255.255.255.255';
+		const port = options?.port || config.nas.wolPort || 9;
 		const timestamp = new Date().toISOString();
 
 		if (!targetMac || targetMac === '00:00:00:00:00:00') {
@@ -64,7 +118,7 @@ export class WakeOnLanService {
 			return {
 				success: false,
 				targetMacMasked: maskMacAddress(targetMac || ''),
-				broadcastAddress,
+				broadcastAddress: defaultBroadcastAddress,
 				port,
 				timestamp,
 				error: errorMsg
@@ -74,33 +128,42 @@ export class WakeOnLanService {
 		try {
 			const magicPacket = this.createMagicPacket(targetMac);
 
-			await new Promise<void>((resolve, reject) => {
-				const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+			// Collect all candidate broadcast addresses
+			const broadcastTargets = new Set<string>();
+			if (defaultBroadcastAddress) broadcastTargets.add(defaultBroadcastAddress);
+			broadcastTargets.add('255.255.255.255');
 
-				socket.on('error', (err) => {
-					socket.close();
-					reject(err);
-				});
+			// Add discovered local interface broadcast addresses
+			for (const bcast of getLocalBroadcastAddresses()) {
+				broadcastTargets.add(bcast);
+			}
 
-				socket.bind(() => {
-					socket.setBroadcast(true);
-					socket.send(magicPacket, 0, magicPacket.length, port, broadcastAddress, (err) => {
-						socket.close();
-						if (err) {
-							reject(err);
-						} else {
-							resolve();
-						}
-					});
-				});
-			});
+			// If local/fallback hosts are configured, calculate their subnet broadcasts
+			for (const host of config.nas.candidateHosts) {
+				const derived = deriveSubnetBroadcast(host);
+				if (derived) broadcastTargets.add(derived);
+			}
 
-			logger.info(`Wake-on-LAN magic packet sent to ${maskMacAddress(targetMac)} via ${broadcastAddress}:${port}`);
+			const targetPorts = Array.from(new Set([port, 9, 7]));
+			const sendPromises: Promise<void>[] = [];
+
+			for (const bcastAddr of broadcastTargets) {
+				for (const targetPort of targetPorts) {
+					sendPromises.push(this.sendPacketBurst(magicPacket, bcastAddr, targetPort));
+				}
+			}
+
+			await Promise.allSettled(sendPromises);
+
+			const targetsSummary = Array.from(broadcastTargets).join(', ');
+			logger.info(
+				`Wake-on-LAN magic packet sent to ${maskMacAddress(targetMac)} via [${targetsSummary}] on ports [${targetPorts.join(', ')}]`
+			);
 
 			return {
 				success: true,
 				targetMacMasked: maskMacAddress(targetMac),
-				broadcastAddress,
+				broadcastAddress: defaultBroadcastAddress,
 				port,
 				timestamp
 			};
@@ -108,19 +171,74 @@ export class WakeOnLanService {
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			logger.error(`Failed to send Wake-on-LAN packet: ${errorMsg}`, err, {
 				targetMacMasked: maskMacAddress(targetMac),
-				broadcastAddress,
+				broadcastAddress: defaultBroadcastAddress,
 				port
 			});
 
 			return {
 				success: false,
 				targetMacMasked: maskMacAddress(targetMac),
-				broadcastAddress,
+				broadcastAddress: defaultBroadcastAddress,
 				port,
 				timestamp,
 				error: errorMsg
 			};
 		}
+	}
+
+	/**
+	 * Sends a burst of UDP magic packets to a specific broadcast address and port.
+	 */
+	private async sendPacketBurst(
+		packet: Buffer,
+		broadcastAddress: string,
+		port: number,
+		burstCount = 3
+	): Promise<void> {
+		return new Promise<void>((resolve) => {
+			const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+			socket.on('error', (err) => {
+				logger.debug(`Socket error sending WOL to ${broadcastAddress}:${port} - ${err.message}`);
+				try {
+					socket.close();
+				} catch {
+					// Ignore close error
+				}
+				resolve();
+			});
+
+			socket.bind(() => {
+				try {
+					socket.setBroadcast(true);
+					let sent = 0;
+					const sendOne = () => {
+						socket.send(packet, 0, packet.length, port, broadcastAddress, (err) => {
+							sent++;
+							if (sent >= burstCount || err) {
+								try {
+									socket.close();
+								} catch {
+									// Ignore close error
+								}
+								resolve();
+							} else {
+								setTimeout(sendOne, 20);
+							}
+						});
+					};
+					sendOne();
+				} catch (err) {
+					logger.debug(`Error during WOL broadcast to ${broadcastAddress}:${port} - ${err}`);
+					try {
+						socket.close();
+					} catch {
+						// Ignore close error
+					}
+					resolve();
+				}
+			});
+		});
 	}
 }
 

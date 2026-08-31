@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WakeOnLanService } from '$lib/server/wol/WakeOnLanService';
+import { WakeOnLanService, calculateBroadcastAddress, deriveSubnetBroadcast } from '$lib/server/wol/WakeOnLanService';
 
 describe('WakeOnLanService', () => {
 	const wol = new WakeOnLanService();
@@ -47,10 +47,23 @@ describe('WakeOnLanService', () => {
 		}
 	});
 
+	it('calculates IPv4 broadcast addresses accurately', () => {
+		expect(calculateBroadcastAddress('192.168.1.50', '255.255.255.0')).toBe('192.168.1.255');
+		expect(calculateBroadcastAddress('10.0.10.5', '255.255.0.0')).toBe('10.0.255.255');
+		expect(calculateBroadcastAddress('invalid', '255.255.255.0')).toBeNull();
+	});
+
+	it('derives /24 subnet broadcast address from IP', () => {
+		expect(deriveSubnetBroadcast('192.168.1.204')).toBe('192.168.1.255');
+		expect(deriveSubnetBroadcast('10.0.0.15')).toBe('10.0.0.255');
+		expect(deriveSubnetBroadcast('')).toBeNull();
+	});
+
 	it('gracefully handles missing MAC configuration in sendWolPacket', async () => {
 		const result = await wol.sendWolPacket({ mac: '00:00:00:00:00:00' });
 		expect(result.success).toBe(false);
 		expect(result.error).toContain('not configured');
 	});
 });
+
 
