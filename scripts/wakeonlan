@@ -28,3 +28,4 @@ if ($ARGV[1]) {
 
 close($sock);
 print "Magic packet sent to $ARGV[0]\n";
+

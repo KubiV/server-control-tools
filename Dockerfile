@@ -27,13 +27,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install runtime utilities (curl for healthcheck, perl for wakeonlan CLI utility)
-RUN apk add --no-cache curl perl
-
-# Copy wakeonlan CLI utility to system PATH
-COPY scripts/wakeonlan /usr/local/bin/wakeonlan
-RUN chmod +x /usr/local/bin/wakeonlan
-
 # Install production dependencies only
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
@@ -46,5 +39,4 @@ EXPOSE 3000
 
 # Run Node.js production server
 CMD ["node", "build/index.js"]
-
 
