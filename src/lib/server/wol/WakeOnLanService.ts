@@ -1,8 +1,12 @@
 import dgram from 'node:dgram';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { config, maskMacAddress } from '../config';
 import { logger } from '../logger';
 import type { WolResponse } from '$lib/types';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Calculates the IPv4 broadcast address given an IP address and a subnet mask.
@@ -100,6 +104,27 @@ export class WakeOnLanService {
 	}
 
 	/**
+	 * Attempts to execute system CLI tools (e.g. wakeonlan, etherwake) as a complementary method.
+	 */
+	private async runSystemWakeOnLan(mac: string, broadcastAddress?: string): Promise<boolean> {
+		const candidates = ['/usr/local/bin/wakeonlan', '/usr/bin/wakeonlan', 'wakeonlan', 'wol', 'etherwake'];
+		for (const cmd of candidates) {
+			try {
+				const args = [mac];
+				if (broadcastAddress && broadcastAddress !== '255.255.255.255') {
+					args.push(broadcastAddress);
+				}
+				await execFileAsync(cmd, args, { timeout: 3000 });
+				logger.info(`Successfully executed system CLI '${cmd}' for ${maskMacAddress(mac)}`);
+				return true;
+			} catch {
+				// Try next candidate
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Send Wake-on-LAN magic packet over UDP broadcast to all candidate broadcast targets.
 	 */
 	public async sendWolPacket(options?: {
@@ -152,6 +177,11 @@ export class WakeOnLanService {
 					sendPromises.push(this.sendPacketBurst(magicPacket, bcastAddr, targetPort));
 				}
 			}
+
+			// Also execute system CLI tool if available
+			sendPromises.push(
+				this.runSystemWakeOnLan(targetMac, defaultBroadcastAddress).then(() => undefined)
+			);
 
 			await Promise.allSettled(sendPromises);
 

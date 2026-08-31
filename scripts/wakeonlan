@@ -1,0 +1,30 @@
+#!/usr/bin/perl -w
+# ==============================================================================
+# Wake-on-LAN CLI utility
+# ==============================================================================
+use strict;
+use Socket;
+
+my $mac = $ARGV[0] or die "Usage: wakeonlan <mac-address> [broadcast-ip]\n";
+$mac =~ s/[^0-9a-fA-F]//g;
+die "Invalid MAC address format: length must be 12 hex chars\n" unless length($mac) == 12;
+
+my $packet = chr(0xFF) x 6 . pack('H12', $mac) x 16;
+
+socket(my $sock, PF_INET, SOCK_DGRAM, getprotobyname('udp')) or die "socket error: $!\n";
+setsockopt($sock, SOL_SOCKET, SO_BROADCAST, 1) or die "setsockopt error: $!\n";
+
+# Send to standard broadcast on ports 9 and 7
+for my $port (9, 7) {
+    send($sock, $packet, 0, sockaddr_in($port, inet_aton('255.255.255.255')));
+}
+
+# If custom broadcast address provided
+if ($ARGV[1]) {
+    for my $port (9, 7) {
+        send($sock, $packet, 0, sockaddr_in($port, inet_aton($ARGV[1])));
+    }
+}
+
+close($sock);
+print "Magic packet sent to $ARGV[0]\n";
